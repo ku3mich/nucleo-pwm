@@ -48,7 +48,7 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim16;
 
 /* USER CODE BEGIN PV */
-
+volatile uint16_t ADC_Data[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,8 +105,40 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+
+  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
+
   while (1)
   {
+	  /*
+	     F    C    F    C
+         PA0, PA1, PA4, PB0
+(UNO Pin  A0, A1,  A2,  A3 - respectively)
+PWM at UNO Pin3 (STM32 PB3): potentiometer at A2 controls Frequency, A3 controls DutyC
+PWM at UNO Pin5 (STM32 PB4): potentiometer at A0 controls Frequency, A1 controls DutyC
+
+PA0 - ADC1-1 RANK 1
+PA1 - ADC1-2 RANK 2
+PA4 - ADC1-4 RANK 3
+
+	   */
+	  HAL_ADCEx_InjectedStart(&hadc1);
+	  HAL_ADC_PollForConversion(&hadc1, 100);
+
+	  ADC_Data[0]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
+	  ADC_Data[1]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_2);
+	  ADC_Data[2]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_3);
+	  HAL_ADCEx_InjectedStop(&hadc1);
+
+	  HAL_ADCEx_InjectedStart(&hadc2);
+	  HAL_ADC_PollForConversion(&hadc2, 100);
+	  ADC_Data[3]=HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
+
+	  HAL_ADCEx_InjectedStop(&hadc2);
+
+	  /* !!!! here you should have all adc values stored in ADC_DATA */
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -180,13 +212,13 @@ static void MX_ADC1_Init(void)
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
+  hadc1.Init.ContinuousConvMode = ENABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfConversion = 3;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
@@ -210,6 +242,22 @@ static void MX_ADC1_Init(void)
   sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Regular Channel 
+  */
+  sConfig.Channel = ADC_CHANNEL_2;
+  sConfig.Rank = ADC_REGULAR_RANK_2;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure Regular Channel 
+  */
+  sConfig.Channel = ADC_CHANNEL_4;
+  sConfig.Rank = ADC_REGULAR_RANK_3;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
