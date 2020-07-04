@@ -110,8 +110,7 @@ int main(void)
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
 
-  HAL_ADCEx_InjectedStart(&hadc1);
-  HAL_ADCEx_InjectedStart(&hadc2);
+
 
   // TIM_TypeDef* TIMx;
 /*
@@ -136,6 +135,9 @@ PA1 - ADC1-2 RANK 2
 PA4 - ADC1-4 RANK 3
 
 	   */
+
+	  HAL_ADCEx_InjectedStart(&hadc1);
+	  HAL_ADCEx_InjectedStart(&hadc2);
 
 	  HAL_ADCEx_InjectedPollForConversion(&hadc1, 1000);
 	  HAL_ADCEx_InjectedPollForConversion(&hadc2, 1000);
@@ -333,7 +335,7 @@ static void MX_ADC2_Init(void)
   }
   /** Configure Regular Channel 
   */
-  sConfig.Channel = ADC_CHANNEL_VREFINT;
+  sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
