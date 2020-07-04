@@ -1,0 +1,69 @@
+21:35
+
+The code must be in C/C++ (No Assembly) for troubleshooting purpose.
+
+
+I have many Arduino UNO R3 Shields which use PWM signals and I want the STM32F334 do replace the UNO.
+
+1) I would like to have the code written with (TIMER) in direct register manipulation, for example:
+
+/* TIMER2 PRESCALER */
+TIM2->PSC = 1 ;
+
+/* SOMETHING ABOUT TIMER2 */
+TIM2->EGR |= TIM_EGR_UG ;
+
+/* SOMETHING ABOUT TIMER2 */
+TIM2->CCMR1 |= TIM_CCMR1_OC2M_2 | TIM_CCMR1_OC2M_3 | TIM_CCMR1_OC2PE ;
+
+The ADC-Mapping doesn't have to be in Direct-Register-Manipulation.
+
+2) The 2 PWM signals must come from STM32F334 PB3 & PB4 (UNO Pin3 & Pin5).
+
+3) The 4 Potentiometers feedback into ADC must go in STM32F334 PA0, PA1, PA4, PB0 (UNO Pin A0, A1, A2, A3 - respectively)
+PWM at UNO Pin3 (STM32 PB3): potentiometer at A2 controls Frequency, A3 controls DutyC
+PWM at UNO Pin5 (STM32 PB4): potentiometer at A0 controls Frequency, A1 controls DutyC
+TIMx->ARR = (uint32_t)Structure->Period ;
+TIMx->CCR2 = OC_Config->Pulse;
+
+
+
+4) The CCRx must be always 1-clock-cycle smaller than ARR - to prevent 100% Duty Cycle
+
+I have STM32CubeIDE
+
+PB3 TIM2_CH2
+PB4 TIM16_CH1 TIM3_CH1
+
+https://stm32f4-discovery.net/2014/05/stm32f4-stm32f429-discovery-pwm-tutorial/
+https://microtechnics.ru/en/stm32cube-stm-and-adc-analog-to-digital-converter/
+https://deepbluembedded.com/stm32-pwm-example-timer-pwm-mode-tutorial/
+http://www.emcu.eu/stm32-basic-timer/ - best of!!!
+
+T = (1/APB_TIM_CLK in MHz) * (PRESCALER_Value + 1) * (PERIOD_Value + 1)
+
+
+suppose:
+APB_TIM_CLK = 8MHz
+PRESCALER_Value = 999
+PERIOD_Value = 7999
+the formula is:
+T= (1/8*10^6) * (999+1) * (7999+1) = 1s
+
+
+PA0, PA1, 
+PA4, PB0
+
+3) The 4 Potentiometers feedback into ADC must go in 
+STM32F334 
+         F    C    F    C
+         PA0, PA1, PA4, PB0 
+(UNO Pin  A0, A1,  A2,  A3 - respectively)
+PWM at UNO Pin3 (STM32 PB3): potentiometer at A2 controls Frequency, A3 controls DutyC
+PWM at UNO Pin5 (STM32 PB4): potentiometer at A0 controls Frequency, A1 controls DutyC
+
+PA0 - 
+PA1 -
+PA4 -
+PB0 -
+

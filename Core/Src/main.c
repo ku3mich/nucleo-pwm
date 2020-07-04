@@ -49,6 +49,7 @@ TIM_HandleTypeDef htim16;
 
 /* USER CODE BEGIN PV */
 volatile uint16_t ADC_Data[4];
+volatile uint16_t ADC_Data_Prev[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -109,6 +110,18 @@ int main(void)
   HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
 
+  HAL_ADCEx_InjectedStart(&hadc1);
+  HAL_ADCEx_InjectedStart(&hadc2);
+
+  // TIM_TypeDef* TIMx;
+/*
+
+ http://www.emcu.eu/stm32-basic-timer/
+
+ 	TIMx->ARR = (uint32_t)Structure->Period ;
+	TIMx->CCR2 = OC_Config->Pulse;
+
+ */
   while (1)
   {
 	  /*
@@ -123,21 +136,34 @@ PA1 - ADC1-2 RANK 2
 PA4 - ADC1-4 RANK 3
 
 	   */
-	  HAL_ADCEx_InjectedStart(&hadc1);
-	  HAL_ADC_PollForConversion(&hadc1, 100);
+
+	  HAL_ADC_PollForConversion(&hadc1, 1000);
+	  HAL_ADC_PollForConversion(&hadc2, 1000);
 
 	  ADC_Data[0]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
 	  ADC_Data[1]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_2);
 	  ADC_Data[2]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_3);
-	  HAL_ADCEx_InjectedStop(&hadc1);
-
-	  HAL_ADCEx_InjectedStart(&hadc2);
-	  HAL_ADC_PollForConversion(&hadc2, 100);
 	  ADC_Data[3]=HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
 
-	  HAL_ADCEx_InjectedStop(&hadc2);
+	  if (ADC_Data[0] != ADC_Data_Prev[0] || ADC_Data[1] != ADC_Data_Prev[1]) {
+		  ADC_Data_Prev[0] = ADC_Data[0];
+		  ADC_Data_Prev[1] = ADC_Data[1];
+		  /*
+		  TIMx= htim2->Instance;
+		  TIMx->ARR = ADC_Data[0] ;
+		  TIMx->CCR2 = ADC_Data[1];
+		  */
+	  }
 
-	  /* !!!! here you should have all adc values stored in ADC_DATA */
+	  if (ADC_Data[2] != ADC_Data_Prev[2] || ADC_Data[3] != ADC_Data_Prev[3]) {
+		  ADC_Data_Prev[2] = ADC_Data[2];
+		  ADC_Data_Prev[3] = ADC_Data[3];
+		  /*
+		  TIMx= htim16->Instance;
+		  TIMx->ARR = ADC_Data[2];
+		  TIMx->CCR2 = ADC_Data[3];
+		  */
+	  }
 
     /* USER CODE END WHILE */
 
@@ -343,9 +369,9 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 999;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 0;
+  htim2.Init.Period = 15999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -368,9 +394,9 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 7999;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
@@ -401,9 +427,9 @@ static void MX_TIM16_Init(void)
 
   /* USER CODE END TIM16_Init 1 */
   htim16.Instance = TIM16;
-  htim16.Init.Prescaler = 0;
+  htim16.Init.Prescaler = 999;
   htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim16.Init.Period = 0;
+  htim16.Init.Period = 15999;
   htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim16.Init.RepetitionCounter = 0;
   htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -416,10 +442,10 @@ static void MX_TIM16_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
+  sConfigOC.Pulse = 7999;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
   sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
   sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
   if (HAL_TIM_PWM_ConfigChannel(&htim16, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
