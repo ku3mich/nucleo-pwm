@@ -137,8 +137,8 @@ PA4 - ADC1-4 RANK 3
 
 	   */
 
-	  HAL_ADC_PollForConversion(&hadc1, 1000);
-	  HAL_ADC_PollForConversion(&hadc2, 1000);
+	  HAL_ADCEx_InjectedPollForConversion(&hadc1, 1000);
+	  HAL_ADCEx_InjectedPollForConversion(&hadc2, 1000);
 
 	  ADC_Data[0]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
 	  ADC_Data[1]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_2);
