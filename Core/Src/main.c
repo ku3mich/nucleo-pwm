@@ -122,7 +122,7 @@ int main(void)
     Error_Handler();
   }
 
-  // TIM_TypeDef* TIMx;
+  TIM_TypeDef* TIMx;
 /*
 
  http://www.emcu.eu/stm32-basic-timer/
@@ -165,21 +165,21 @@ ADC_Data:
 	  if (ADC_Data[0] != ADC_Data_Prev[0] || ADC_Data[1] != ADC_Data_Prev[1]) {
 		  ADC_Data_Prev[0] = ADC_Data[0];
 		  ADC_Data_Prev[1] = ADC_Data[1];
-		  /*
+
 		  TIMx= htim2->Instance;
 		  TIMx->ARR = ADC_Data[0] ;
 		  TIMx->CCR2 = ADC_Data[1];
-		  */
+
 	  }
 
 	  if (ADC_Data[2] != ADC_Data_Prev[2] || ADC_Data[3] != ADC_Data_Prev[3]) {
 		  ADC_Data_Prev[2] = ADC_Data[2];
 		  ADC_Data_Prev[3] = ADC_Data[3];
-		  /*
+
 		  TIMx= htim16->Instance;
 		  TIMx->ARR = ADC_Data[2];
 		  TIMx->CCR2 = ADC_Data[3];
-		  */
+
 	  }
 
     /* USER CODE END WHILE */
