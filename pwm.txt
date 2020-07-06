@@ -67,3 +67,46 @@ PA1 -
 PA4 -
 PB0 -
 
+100KHz to 8Mhz
+
+
+"uC_STMF334 Reference Manual - dm00093941-stm32f334xx-advanced-armbased-32bit-mcus-stmicroelectronics.pdf" 
+
+1) TIMER setting must be written by direct register change and with comments
+it is
+2) CCRx value must be always 1 clock-cycle smaller than ARRx value to prevent flat high or flat low
+done
+3) PWM must have output frequency of 100KHz to 8Mhz and Duty Cycle from 1 clock-cycle to 99%. Variable resistor --> ADC mapping must be catered for this range.
+np
+4) TIMER at PB4 is not working
+it is working, we tested it tigether
+
+> The Refence manual page 50 says TIM2 is on APB1 which is limited at at 36Mhz. 
+no, refernce manual says:
+
+Several prescalers can be used to configure the AHB frequency, the high speed APB
+(APB2) and the low speed APB (APB1) domains. The maximum frequency of the AHB and
+APB2 domains is 72 MHz. The maximum allowed frequency of the APB1 domain is 36 MHz.
+
+but TIMx use x2 so real timer clocks are 64Mhz look at PCCLK1, APB1 and APB1 x2 for TIMx at the CubeMX Clocks Page
+
+> TIM1 and TIM16 are APB2 which can max out 72MHz. 
+
+
+> Can you change PB4 from TIM2 to TIM16? Thanks. 
+I chnaged from TIM16 to TIM4
+
+
+> I test with this seperate setup and I got output at PB3, not PB4. 
+> Also, with PB3, when I accidentally set CCR resistor > ARR resistor, I got high flat line. 
+> I reversed CCR resistor but output won't go back, it stayed high flat. 
+> I need away to limit CCR < ARR. Also, the frequency I need is 100Khz to 8MHz and duty cycle from 1 clock-cycle to 99%. 
+> Currently the resistors are not limited into that frequency range.
+
+sure, because prescaller set to 999 
+
+That's it for now. I will be back online after several hours. See you!
+
+
+
+

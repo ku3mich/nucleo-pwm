@@ -1,21 +1,21 @@
 /* USER CODE BEGIN Header */
 /**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * <h2><center>&copy; Copyright (c) 2020 STMicroelectronics.
-  * All rights reserved.</center></h2>
-  *
-  * This software component is licensed by ST under BSD 3-Clause license,
-  * the "License"; You may not use this file except in compliance with the
-  * License. You may obtain a copy of the License at:
-  *                        opensource.org/licenses/BSD-3-Clause
-  *
-  ******************************************************************************
-  */
+ ******************************************************************************
+ * @file           : main.c
+ * @brief          : Main program body
+ ******************************************************************************
+ * @attention
+ *
+ * <h2><center>&copy; Copyright (c) 2020 STMicroelectronics.
+ * All rights reserved.</center></h2>
+ *
+ * This software component is licensed by ST under BSD 3-Clause license,
+ * the "License"; You may not use this file except in compliance with the
+ * License. You may obtain a copy of the License at:
+ *                        opensource.org/licenses/BSD-3-Clause
+ *
+ ******************************************************************************
+ */
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
@@ -23,7 +23,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdlib.h>
+#include <math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -38,6 +39,20 @@
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
+// delta for ADC value change that is not counted as timer change to prevent setup timer every time due ADC measurement error
+#define ADC_DELTA 15
+
+#define ADC_max 4096
+
+// see APB1 domain/ timer clock
+#define TIMER_CLOCK (64 * 1000000l)
+
+// 100Khz
+#define PWM_min (100 * 1000l)
+
+// 8Mhz
+#define PWM_max (8 * 1000000l)
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -45,11 +60,11 @@ ADC_HandleTypeDef hadc1;
 ADC_HandleTypeDef hadc2;
 
 TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim16;
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-volatile uint16_t ADC_Data[4];
-volatile uint16_t ADC_Data_Prev[4];
+volatile uint16_t adcData[4];
+volatile uint16_t adcDataPrev[4];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -58,13 +73,40 @@ static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_ADC2_Init(void);
 static void MX_TIM2_Init(void);
-static void MX_TIM16_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void setupTimer(TIM_TypeDef *TIMx, uint16_t adcF, uint16_t adcC) {
+	float p = (float) adcC / ADC_max; // percent of duty cycle
+	p = p > 0.99 ? 0.99 : p; // not greater than 99%
+
+	// freq to period mapping
+	float freq = PWM_min + (PWM_max - PWM_min) * ((float) adcF / ADC_max);
+	uint16_t f = round(freq / TIMER_CLOCK / 2);
+	uint16_t c = round(f * p);
+
+	// not less one cycle
+	c = c == 0 ? 1 : c;
+
+/*
+ 	 http://www.emcu.eu/stm32-basic-timer/
+
+	 TIMx->ARR = (uint32_t)Structure->Period ;
+	 TIMx->CCR2 = OC_Config->Pulse;
+*/
+
+	TIMx->ARR = f;
+	TIMx->CCR2 = c;
+}
+
+uint32_t delta(uint16_t a, uint16_t b) {
+	return abs((int16_t) a - (int16_t) b);
+}
 
 /* USER CODE END 0 */
 
@@ -99,7 +141,7 @@ int main(void)
   MX_ADC1_Init();
   MX_ADC2_Init();
   MX_TIM2_Init();
-  MX_TIM16_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -107,85 +149,67 @@ int main(void)
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
 
-  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
-  HAL_TIM_PWM_Start(&htim16, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_2);
+	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 
-  if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK)
-  {
-    /* Calibration Error */
-    Error_Handler();
-  }
+	if (HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED) != HAL_OK) {
+		Error_Handler();
+	}
 
-  if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK)
-  {
-    /* Calibration Error */
-    Error_Handler();
-  }
+	if (HAL_ADCEx_Calibration_Start(&hadc2, ADC_SINGLE_ENDED) != HAL_OK) {
+		Error_Handler();
+	}
 
-  TIM_TypeDef* TIMx;
-/*
+	while (1) {
+		/*
+		 F    C    F    C
+		 PA0, PA1, PA4, PB0
+		 (UNO Pin  A0, A1,  A2,  A3 - respectively)
+		 PWM at UNO Pin3 (STM32 PB3): potentiometer at A2 controls Frequency, A3 controls DutyC
+		 PWM at UNO Pin5 (STM32 PB4): potentiometer at A0 controls Frequency, A1 controls DutyC
 
- http://www.emcu.eu/stm32-basic-timer/
+		 ADC_Data:
 
- 	TIMx->ARR = (uint32_t)Structure->Period ;
-	TIMx->CCR2 = OC_Config->Pulse;
+		 0		: PA0 - ADC1-1  RANK 1 F
+		 1		: PA1 - ADC1-2  RANK 2 C
 
- */
-  while (1)
-  {
-	  /*
-	     F    C    F    C
-         PA0, PA1, PA4, PB0
-(UNO Pin  A0, A1,  A2,  A3 - respectively)
-PWM at UNO Pin3 (STM32 PB3): potentiometer at A2 controls Frequency, A3 controls DutyC
-PWM at UNO Pin5 (STM32 PB4): potentiometer at A0 controls Frequency, A1 controls DutyC
+		 2		: PA4 - ADC2-1  RANK 1 F
+		 3		: PB0 - ADC1-11 RANK 3 C
 
-ADC_Data:
+		 */
 
-0		: PA0 - ADC1-1  RANK 1 F
-1		: PA1 - ADC1-2  RANK 2 C
+		HAL_ADCEx_InjectedStart(&hadc1);
+		HAL_ADCEx_InjectedPollForConversion(&hadc1, 10);
+		adcData[0] = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
+		adcData[1] = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_2);
+		adcData[3] = HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_3);
+		HAL_ADCEx_InjectedStop(&hadc1);
 
-2		: PA4 - ADC2-1  RANK 1 F
-3		: PB0 - ADC1-11 RANK 3 C
+		HAL_ADCEx_InjectedStart(&hadc2);
+		HAL_ADCEx_InjectedPollForConversion(&hadc2, 10);
+		adcData[2] = HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
+		HAL_ADCEx_InjectedStop(&hadc2);
 
-	   */
+		if ( (delta(adcData[0], adcDataPrev[0]) > ADC_DELTA)
+				|| (delta(adcData[1], adcDataPrev[1]) > ADC_DELTA)) {
+			adcDataPrev[0] = adcData[0];
+			adcDataPrev[1] = adcData[1];
 
-	  HAL_ADCEx_InjectedStart(&hadc1);
-	  HAL_ADCEx_InjectedPollForConversion(&hadc1, 10);
-	  ADC_Data[0]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
-	  ADC_Data[1]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_2);
-	  ADC_Data[3]=HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_3);
-	  HAL_ADCEx_InjectedStop(&hadc1);
+			setupTimer(htim2.Instance, adcData[0], adcData[1]);
+		}
 
-	  HAL_ADCEx_InjectedStart(&hadc2);
-	  HAL_ADCEx_InjectedPollForConversion(&hadc2, 10);
-	  ADC_Data[2]=HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
-	  HAL_ADCEx_InjectedStop(&hadc2);
+		if ( (delta(adcData[2], adcDataPrev[2]) > ADC_DELTA)
+				|| (delta(adcData[3], adcDataPrev[3]) > ADC_DELTA)) {
+			adcDataPrev[2] = adcData[2];
+			adcDataPrev[3] = adcData[3];
 
-	  if (ADC_Data[0] != ADC_Data_Prev[0] || ADC_Data[1] != ADC_Data_Prev[1]) {
-		  ADC_Data_Prev[0] = ADC_Data[0];
-		  ADC_Data_Prev[1] = ADC_Data[1];
-
-		  TIMx= htim2->Instance;
-		  TIMx->ARR = ADC_Data[0] ;
-		  TIMx->CCR2 = ADC_Data[1];
-
-	  }
-
-	  if (ADC_Data[2] != ADC_Data_Prev[2] || ADC_Data[3] != ADC_Data_Prev[3]) {
-		  ADC_Data_Prev[2] = ADC_Data[2];
-		  ADC_Data_Prev[3] = ADC_Data[3];
-
-		  TIMx= htim16->Instance;
-		  TIMx->ARR = ADC_Data[2];
-		  TIMx->CCR2 = ADC_Data[3];
-
-	  }
+			setupTimer(htim3.Instance, adcData[2], adcData[3]);
+		}
 
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  }
+	}
   /* USER CODE END 3 */
 }
 
@@ -394,7 +418,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 999;
+  htim2.Init.Prescaler = 1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 15999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -434,65 +458,51 @@ static void MX_TIM2_Init(void)
 }
 
 /**
-  * @brief TIM16 Initialization Function
+  * @brief TIM3 Initialization Function
   * @param None
   * @retval None
   */
-static void MX_TIM16_Init(void)
+static void MX_TIM3_Init(void)
 {
 
-  /* USER CODE BEGIN TIM16_Init 0 */
+  /* USER CODE BEGIN TIM3_Init 0 */
 
-  /* USER CODE END TIM16_Init 0 */
+  /* USER CODE END TIM3_Init 0 */
 
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
   TIM_OC_InitTypeDef sConfigOC = {0};
-  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
-  /* USER CODE BEGIN TIM16_Init 1 */
+  /* USER CODE BEGIN TIM3_Init 1 */
 
-  /* USER CODE END TIM16_Init 1 */
-  htim16.Instance = TIM16;
-  htim16.Init.Prescaler = 999;
-  htim16.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim16.Init.Period = 15999;
-  htim16.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim16.Init.RepetitionCounter = 0;
-  htim16.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim16) != HAL_OK)
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 1;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 15999;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
   {
     Error_Handler();
   }
-  if (HAL_TIM_PWM_Init(&htim16) != HAL_OK)
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 7999;
+  sConfigOC.Pulse = 8999;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_ENABLE;
-  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&htim16, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
-  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
-  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 0;
-  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
-  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
-  sBreakDeadTimeConfig.BreakFilter = 0;
-  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-  if (HAL_TIMEx_ConfigBreakDeadTime(&htim16, &sBreakDeadTimeConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM16_Init 2 */
+  /* USER CODE BEGIN TIM3_Init 2 */
 
-  /* USER CODE END TIM16_Init 2 */
-  HAL_TIM_MspPostInit(&htim16);
+  /* USER CODE END TIM3_Init 2 */
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
@@ -530,7 +540,7 @@ static void MX_GPIO_Init(void)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
+	/* User can add his own implementation to report the HAL error return state */
 
   /* USER CODE END Error_Handler_Debug */
 }
@@ -546,7 +556,7 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 { 
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
+	/* User can add his own implementation to report the file name and line number,
      tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
